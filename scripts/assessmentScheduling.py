@@ -1,4 +1,10 @@
 """
+V2 (labeled in comments in code):
+* In functionScript, added not-scheduled assessors to Capacity Usage sheet in final schedule excel so it's easy to check reason for absence in schedule
+
+
+
+V1
 All dates are assumed to be: YYYY-MM-DD
 ----------
 Input file:
@@ -64,6 +70,22 @@ if getattr(sys, 'frozen', False):
 else:
     base_path = os.path.dirname(os.path.abspath(__file__))
 
+def slider_callback(value):
+    integer_value = round(value)  # Ensure it's an integer
+    value_label.configure(text=f"Value: {value:.2f}")  # Update the label dynamically
+    set_slider_color(integer_value)
+
+def set_slider_color(value):
+    # Define colors for three categories
+    colors = [
+        "#00FF00", "#00FF00", "#00FF00", "#00FF00", "#00FF00",  # Green 
+        "#00FF00", "#00FF00", "#00FF00", "#00FF00", "#00FF00",  # Orange
+        "#FFFF00", "#FFFF00", "#FFA500", "#FFA500", "#FF4500",  # Red 
+    ]
+    step_size = 3 / 15  # Each step covers 3/15 of the range
+    index = min(int(value / step_size), 14)  # Calculate index (0–14)
+    slider.configure(progress_color=colors[index])
+
 def start_scheduling_threaded():
     # Start the scheduling process in a separate thread to avoid freezing of GUI
     scheduling_thread = threading.Thread(target=start_scheduling, daemon=True) #daemon prevents lingering threads background after closing
@@ -107,7 +129,7 @@ def start_scheduling():
         selectedFile = retrieve_calenders(selectedFile, output_text, startDate, endDate)
         print(selectedFile)
         
-    solutionDf, capacityUsage, goal_comparison_df, scheduleText = makeSchedule(startDate, endDate, selectedFile, output_text, check_calender=check_calender_var.get(), want_ics=False) #create_ICS.get())
+    solutionDf, capacityUsage, goal_comparison_df, scheduleText = makeSchedule(startDate, endDate, selectedFile, output_text, check_calender=check_calender_var.get(), constant_goal_weight=slider.get(), want_ics=False) #create_ICS.get())
 
     current_time = datetime.now().strftime("%d%m%H%M")
     if check_calender_var.get(): #If availability taken into account
@@ -127,23 +149,21 @@ def start_scheduling():
         solutionDf.to_excel(writer, sheet_name='Schedule', index=False)
         capacityUsage.to_excel(writer, sheet_name='Capacity Usage', index=False)
         goal_comparison_df.to_excel(writer, sheet_name='Goal Comparison', index=False)
-        
+                   
         #Active formulas:
         workbook = writer.book
         capacity_usage_worksheet = writer.sheets['Capacity Usage']
         row_count = 2
-        for month in solutionDf['Month'].unique():
-            filtered_df = solutionDf[solutionDf['Month'] == month]
-            for row_num in range(len(filtered_df['Assessor'].unique())):
-                capacity_usage_worksheet.write_formula(row_count-1, 2, f"=SUMIFS(Schedule!E:E, Schedule!G:G, A{row_count}, Schedule!F:F, B{row_count})")
-                capacity_usage_worksheet.write_formula(row_count-1, 3, f"=SUMIFS(Schedule!E:E, Schedule!G:G, A{row_count}, Schedule!F:F, B{row_count}, Schedule!C:C, \"Curious Case\")")
-                capacity_usage_worksheet.write_formula(row_count-1, 4, f"=SUMIFS(Schedule!E:E, Schedule!G:G, A{row_count}, Schedule!F:F, B{row_count}, Schedule!D:D, \"PAPI1\")")
-                capacity_usage_worksheet.write_formula(row_count-1, 5, f"=SUMIFS(Schedule!E:E, Schedule!G:G, A{row_count}, Schedule!F:F, B{row_count}, Schedule!D:D, \"ROLEPLAY1\")")
-                capacity_usage_worksheet.write_formula(row_count-1, 6, f"=SUMIFS(Schedule!E:E, Schedule!G:G, A{row_count}, Schedule!F:F, B{row_count}, Schedule!D:D, \"CASE1\")")
-                capacity_usage_worksheet.write_formula(row_count-1, 7, f"=SUMIFS(Schedule!E:E, Schedule!G:G, A{row_count}, Schedule!F:F, B{row_count}, Schedule!D:D, \"DATACASE\")")               
-                capacity_usage_worksheet.write_formula(row_count-1, 9, f"=I{row_count}-C{row_count}")
-                row_count += 1
-                
+        for row_num in range(len(capacityUsage)):
+            capacity_usage_worksheet.write_formula(row_count-1, 2, f"=SUMIFS(Schedule!E:E, Schedule!G:G, A{row_count}, Schedule!F:F, B{row_count})")
+            capacity_usage_worksheet.write_formula(row_count-1, 3, f"=SUMIFS(Schedule!E:E, Schedule!G:G, A{row_count}, Schedule!F:F, B{row_count}, Schedule!C:C, \"Curious Case\")")
+            capacity_usage_worksheet.write_formula(row_count-1, 4, f"=SUMIFS(Schedule!E:E, Schedule!G:G, A{row_count}, Schedule!F:F, B{row_count}, Schedule!D:D, \"PAPI1\")")
+            capacity_usage_worksheet.write_formula(row_count-1, 5, f"=SUMIFS(Schedule!E:E, Schedule!G:G, A{row_count}, Schedule!F:F, B{row_count}, Schedule!D:D, \"ROLEPLAY1\")")
+            capacity_usage_worksheet.write_formula(row_count-1, 6, f"=SUMIFS(Schedule!E:E, Schedule!G:G, A{row_count}, Schedule!F:F, B{row_count}, Schedule!D:D, \"CASE1\")")
+            capacity_usage_worksheet.write_formula(row_count-1, 7, f"=SUMIFS(Schedule!E:E, Schedule!G:G, A{row_count}, Schedule!F:F, B{row_count}, Schedule!D:D, \"DATACASE\")")               
+            capacity_usage_worksheet.write_formula(row_count-1, 9, f"=I{row_count}-C{row_count}")
+            row_count += 1
+        
         goal_comparison_worksheet = writer.sheets['Goal Comparison']
         row_count = 2
         for program_name in goal_comparison_df['Program']:
@@ -167,8 +187,8 @@ def start_scheduling():
 # Initialize the customTKinter application
 app = ctk.CTk()
 app.title("ORMIT Assessment Scheduler")
-window_width = 720
-window_height = 560
+window_width = 720*1.3
+window_height = 560*1.3
 app.geometry(f"{window_width}x{window_height}")
 app.resizable(False, True)
 # Bring the window to the front and make it topmost
@@ -197,56 +217,81 @@ app.columnconfigure(1, weight=1)
 
 # File entry
 file_entry_label = ctk.CTkLabel(app, text='Assessor Info:')
-file_entry_label.grid(row=0, column=0, padx=(20,20), pady=(20,0), sticky="w")
+file_entry_label.grid(row=0, column=1, padx=(20,20), pady=(20,0), sticky="w")
 file_entry_var = ctk.StringVar()
-file_entry = ctk.CTkEntry(app, width=180, textvariable=file_entry_var, placeholder_text="Select an Excel file...")
-file_entry.grid(row=1, column=0,sticky="ew", padx=(20, 20), pady=(0, 5))
+file_entry = ctk.CTkEntry(app, width=300, textvariable=file_entry_var, placeholder_text="Select an Excel file...")
+file_entry.grid(row=1, column=1,sticky="ew", padx=(20, 20), pady=(0, 5))
 
 # Open button
 open_button = ctk.CTkButton(app, text="Browse", command=open_file)
-open_button.grid(row=1, column=1, pady=(0, 5))
+open_button.grid(row=1, column=2, pady=(0, 5))
 
 # Start date label and calendar
 start_date_label = ctk.CTkLabel(app, text="Start Date:")
-start_date_label.grid(row=2, column=0, padx=(20, 20), pady=(5, 0), sticky="w")
+start_date_label.grid(row=2, column=1, padx=(20, 20), pady=(5, 0), sticky="w")
 start_date_cal = Calendar(app, selectmode='day',showweeknumbers = False, showothermonthdays = False,
                           year=2025, month=1, day=1,  # Set your default date here
                           font=Montserrat,
-                          background = "#b88348", selectbackground ="#ffb1fa",
-                          headersbackground ="#cda87f", headersforeground = "#ffffff")
-start_date_cal.grid(row=3, column=0, padx=(20, 20), pady=(0, 5))
+                          background = "#343A40", selectbackground ="#003366",
+                          headersbackground ="#343A40", headersforeground = "#ffffff")
+
+# start_date_cal = Calendar(app, selectmode='day', showweeknumbers=False, showothermonthdays=False,
+#                           year=2025, month=1, day=1,  # Set your default date here
+#                           font=Montserrat,
+#                           background="#F8F9FA", selectbackground="#003366",
+#                           headersbackground="#343A40", headersforeground="#FFFFFF")
+
+start_date_cal.grid(row=3, column=1, padx=(20, 20), pady=(0, 5))
 
 # End date label and calendar
 end_date_label = ctk.CTkLabel(app, text="End Date:")
-end_date_label.grid(row=2, column=1, padx=(20, 20), pady=(5, 0), sticky="w")
+end_date_label.grid(row=2, column=2, padx=(20, 20), pady=(5, 0), sticky="w")
 end_date_cal = Calendar(app, selectmode='day',showweeknumbers = False, showothermonthdays = False,
                           year=2025, month=12, day=31,  # Set your default date here
                           font=Montserrat,
-                          background = "#b88348", selectbackground ="#ffb1fa",
-                          headersbackground ="#cda87f", headersforeground = "#ffffff")
-end_date_cal.grid(row=3, column=1, padx=(20,20), pady=(0, 5))
+                          background = "#343A40", selectbackground ="#003366",
+                          headersbackground ="#343A40", headersforeground = "#ffffff")
+end_date_cal.grid(row=3, column=2, padx=(20,20), pady=(0, 5))
 
 # Checkbox for using staff information already in file 
 check_calender_var = ctk.BooleanVar(value=True)  # Default value can be set to True or False
 check_calender_checkbox = ctk.CTkCheckBox(app, text="Consider Staff Availability", variable=check_calender_var)
-check_calender_checkbox.grid(row=4, column=0, padx=(20, 20), pady=(10, 0), sticky="w")
+check_calender_checkbox.grid(row=1, column=0, padx=(20, 20), pady=(10, 0), sticky="w")
 
 # Start scheduling button
 start_button = ctk.CTkButton(app, text="Start Scheduling", command=start_scheduling_threaded)
-start_button.grid(row=4, column=1, pady=20)
+start_button.grid(row=11, column=2, pady=20)
 
 # Checkbox for regenerating live calender situation of staff (Outlook), adds +-4 minutes
 retrieve_calender_var = ctk.BooleanVar(value=True)  # Default value can be set to True or False
 retrieve_calender_checkbox = ctk.CTkCheckBox(app, text="Update Staff Availability (+4 min.)", variable=retrieve_calender_var)
-retrieve_calender_checkbox.grid(row=5, column=0, padx=(20, 20), pady=(10, 0), sticky="w")
+retrieve_calender_checkbox.grid(row=2, column=0, padx=(20, 20), pady=(10, 0), sticky="w")
+
+# Slider
+left_label = ctk.CTkLabel(app, text="Less external | Less goals")
+left_label.grid(row=8, column=0, padx=(20, 5), pady=(10, 0), sticky="e")
+slider = ctk.CTkSlider(
+    app, from_=0.001, to=3, number_of_steps=15, command=slider_callback
+)
+slider.set(1)  # Set default value
+
+slider.grid(row=8, column=1, padx=(5, 5), pady=(10, 0), sticky="ew")
+# Value label to display current slider value
+value_label = ctk.CTkLabel(app, text="Value: 1")  # Initial value display
+value_label.grid(row=9, column=1, padx=(5, 5), pady=(10, 0), sticky="n")
+# Right label
+right_label = ctk.CTkLabel(app, text="More external | More goals")
+right_label.grid(row=8, column=2, padx=(5, 20), pady=(10, 0), sticky="w")
+
+
 # # Checkbox for creating ICS files for every assessor if succesful
 # create_ICS = ctk.BooleanVar(value=True)  # Default value can be set to True or False
 # create_ICS_checkbox = ctk.CTkCheckBox(app, text="Create Outlook files", variable=create_ICS)
 # create_ICS_checkbox.grid(row=6, column=0, padx=(20, 20), pady=(10, 0), sticky="w")
 
 #Text window
-output_text = ctk.CTkTextbox(app, width=600, height=100, state='disabled')
-output_text.grid(row=6, column=0, columnspan=2, padx=(20, 20), pady=(10, 20), sticky="ew")
+output_text = ctk.CTkTextbox(app, width=800, height=100, state='disabled')
+output_text.grid(row=10, column=0, columnspan=3, padx=(20, 20), pady=(10, 20), sticky="ew")
 
 # Run the application
 app.mainloop()

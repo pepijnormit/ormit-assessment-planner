@@ -102,7 +102,7 @@ def makeICS(schedule, startdate, enddate, email_file='emails.json'):
 
 
 ### Preparing the data ###
-def makeSchedule(startDate, endDate, assessorExcel, output_text, check_calender=False, want_ics=False):    
+def makeSchedule(startDate, endDate, assessorExcel, output_text, check_calender=False, constant_goal_weight=1, want_ics=False):    
     if check_calender:
         log_message('Using calender availability for scheduling', output_text)
     else:
@@ -447,7 +447,6 @@ def makeSchedule(startDate, endDate, assessorExcel, output_text, check_calender=
             goal_deviations.append(under_goal)
 
     # Update the objective function to minimize both external assessor usage and goal deviations
-    constant_goal_weight = 1  # You can adjust this weight depending on how much you want to prioritize goals
     model.Minimize(external_assessor_count + constant_goal_weight * sum(goal_deviations))
 
     ### The Solution ###
@@ -517,7 +516,21 @@ def makeSchedule(startDate, endDate, assessorExcel, output_text, check_calender=
         capacityUsage.insert(capacityUsage.columns.get_loc('Total Capacity'), 'Business Case', '')
         capacityUsage.insert(capacityUsage.columns.get_loc('Total Capacity'), 'Datacase', '')
         capacityUsage['Remaining Capacity'] = capacityUsage['Total Capacity'] - capacityUsage['Total Capacity Cost']
-    
+        #V2: Also add the ones who weren't scheduled
+        for month in solutionDf['Month'].unique():
+            filtered_df = solutionDf[solutionDf['Month'] == month]
+            assessors_this_month = filtered_df['Assessor'].unique()
+            for assessor in assessors.keys():
+                if assessor not in assessors_this_month:
+                    print(assessors[assessor]['Capacity'][month])
+                    new_row_df = pd.DataFrame([{'Month': month, 'Assessor': assessor, 'Curious Case': 0, 'PAPI': 0, 'Roleplay': 0, 'Business Case': 0, 'Datacase': 0, 'Total Capacity Cost': 0, 'Total Capacity': assessors[assessor]['Capacity'][month], 'Remaining Capacity': assessors[assessor]['Capacity'][month]}])
+                    capacityUsage = pd.concat([capacityUsage, new_row_df], ignore_index=True)
+                    
+        # Sort the DataFrame first by 'Month', then by 'Total Capacity Cost'
+        # Sort by 'Month' ascending and then by 'Total Capacity Cost' descending
+        capacityUsage = capacityUsage.sort_values(by=['Month', 'Total Capacity Cost'], ascending=[True, False])
+
+        
         solutionDf['Date'] = solutionDf['Date'].dt.strftime('%Y-%m-%d') #Make sure not to include time
         solutionDf = solutionDf[['Date', 'Time Slot', 'Program', 'Role', 'Total Capacity Cost', 'Assessor', 'Month']] #Rearrange order
 

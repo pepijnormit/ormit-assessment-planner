@@ -61,7 +61,6 @@ def load_data(file_name):
                     month = key.split('- ')[1]
                     month_number = get_month_number(month)
                     assessor_data.setdefault('Capacity', {})[month_number] = int(value)
-                    assessor_data.setdefault('Capacity', {})[month_number] = int(value)
 
                 elif key == 'Activities':
                     assessor_data[key] = value.split(', ') if value else []
